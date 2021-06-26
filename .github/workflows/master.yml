@@ -8,7 +8,7 @@ on:
 jobs:
   sync_with_upstream:
     runs-on: ubuntu-latest
-    name: Sync main with upstream latest
+    name: Sync master with upstream latest
 
     steps:
     - name: Checkout master

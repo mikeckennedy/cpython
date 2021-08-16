@@ -891,7 +891,7 @@ class ControlMixin(object):
                     single parameter - the request - in order to
                     process the request. This handler is called on the
                     server thread, effectively meaning that requests are
-                    processed serially. While not quite Web scale ;-),
+                    processed serially. While not quite web scale ;-),
                     this should be fine for testing applications.
     :param poll_interval: The polling interval in seconds.
     """
@@ -1941,6 +1941,14 @@ class SysLogHandlerTest(BaseTest):
         logger.error("sp\xe4m")
         self.handled.wait()
         self.assertEqual(self.log_output, b'<11>h\xc3\xa4m-sp\xc3\xa4m')
+
+    def test_udp_reconnection(self):
+        logger = logging.getLogger("slh")
+        self.sl_hdlr.close()
+        self.handled.clear()
+        logger.error("sp\xe4m")
+        self.handled.wait(0.1)
+        self.assertEqual(self.log_output, b'<11>sp\xc3\xa4m\x00')
 
 @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "Unix sockets required")
 class UnixSysLogHandlerTest(SysLogHandlerTest):

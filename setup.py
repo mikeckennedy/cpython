@@ -942,7 +942,8 @@ class PyBuildExt(build_ext):
                            extra_compile_args=['-DPy_BUILD_CORE_MODULE']))
 
         # profiler (_lsprof is for cProfile.py)
-        self.add(Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']))
+        self.add(Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c'],
+                           extra_compile_args=['-DPy_BUILD_CORE_MODULE']))
         # static Unicode character database
         self.add(Extension('unicodedata', ['unicodedata.c'],
                            depends=['unicodedata_db.h', 'unicodename_db.h'],
@@ -1767,7 +1768,9 @@ class PyBuildExt(build_ext):
                 ('XML_POOR_ENTROPY', '1'),
             ]
             extra_compile_args = []
-            expat_lib = []
+            # bpo-44394: libexpat uses isnan() of math.h and needs linkage
+            # against the libm
+            expat_lib = ['m']
             expat_sources = ['expat/xmlparse.c',
                              'expat/xmlrole.c',
                              'expat/xmltok.c']

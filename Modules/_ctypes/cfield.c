@@ -1,5 +1,6 @@
 #include "Python.h"
 #include "pycore_bitutils.h"      // _Py_bswap32()
+#include "pycore_call.h"          // _PyObject_CallNoArgs()
 
 #include <ffi.h>
 #ifdef MS_WIN32
@@ -35,7 +36,7 @@ PyCField_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
  * Expects the size, index and offset for the current field in *psize and
  * *poffset, stores the total size so far in *psize, the offset for the next
  * field in *poffset, the alignment requirements for the current field in
- * *palign, and returns a field desriptor for this field.
+ * *palign, and returns a field descriptor for this field.
  */
 /*
  * bitfields extension:
@@ -61,7 +62,7 @@ PyCField_FromDesc(PyObject *desc, Py_ssize_t index,
 #define CONT_BITFIELD 2
 #define EXPAND_BITFIELD 3
 
-    self = (CFieldObject *)_PyObject_CallNoArg((PyObject *)&PyCField_Type);
+    self = (CFieldObject *)_PyObject_CallNoArgs((PyObject *)&PyCField_Type);
     if (self == NULL)
         return NULL;
     dict = PyType_stgdict(desc);

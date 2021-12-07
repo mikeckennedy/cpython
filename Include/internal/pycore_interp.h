@@ -93,7 +93,6 @@ struct _Py_unicode_state {
 #  define PyTuple_MAXFREELIST 1
 #  define PyList_MAXFREELIST 0
 #  define PyDict_MAXFREELIST 0
-#  define PyFrame_MAXFREELIST 0
 #  define _PyAsyncGen_MAXFREELIST 0
 #  define PyContext_MAXFREELIST 0
 #endif
@@ -155,18 +154,6 @@ struct _Py_dict_state {
     int numfree;
     PyDictKeysObject *keys_free_list[PyDict_MAXFREELIST];
     int keys_numfree;
-#endif
-};
-
-#ifndef PyFrame_MAXFREELIST
-#  define PyFrame_MAXFREELIST 200
-#endif
-
-struct _Py_frame_state {
-#if PyFrame_MAXFREELIST > 0
-    PyFrameObject *free_list;
-    /* number of frames currently in free_list */
-    int numfree;
 #endif
 };
 
@@ -247,19 +234,23 @@ struct type_cache {
 
 /* interpreter state */
 
-#define _PY_NSMALLPOSINTS           257
-#define _PY_NSMALLNEGINTS           5
-
-// _PyLong_GetZero() and _PyLong_GetOne() must always be available
-#if _PY_NSMALLPOSINTS < 2
-#  error "_PY_NSMALLPOSINTS must be greater than 1"
-#endif
-
 // The PyInterpreterState typedef is in Include/pystate.h.
 struct _is {
 
     struct _is *next;
-    struct _ts *tstate_head;
+
+    struct pythreads {
+        int _preallocated_used;
+        uint64_t next_unique_id;
+        struct _ts *head;
+        /* Used in Modules/_threadmodule.c. */
+        long count;
+        /* Support for runtime thread stack size tuning.
+           A value of 0 means using the platform's default stack size
+           or the size specified by the THREAD_STACK_SIZE macro. */
+        /* Used in Python/thread.c. */
+        size_t stacksize;
+    } threads;
 
     /* Reference to the _PyRuntime global variable. This field exists
        to not have to pass runtime in addition to tstate to a function.
@@ -289,14 +280,6 @@ struct _is {
     // (-1: "off", 1: "on", 0: no override)
     int override_frozen_modules;
 
-    /* Used in Modules/_threadmodule.c. */
-    long num_threads;
-    /* Support for runtime thread stack size tuning.
-       A value of 0 means using the platform's default stack size
-       or the size specified by the THREAD_STACK_SIZE macro. */
-    /* Used in Python/thread.c. */
-    size_t pythread_stacksize;
-
     PyObject *codec_search_path;
     PyObject *codec_search_cache;
     PyObject *codec_error_registry;
@@ -323,19 +306,11 @@ struct _is {
     PyObject *after_forkers_child;
 #endif
 
-    uint64_t tstate_next_unique_id;
-
     struct _warnings_runtime_state warnings;
     struct atexit_state atexit;
 
     PyObject *audit_hooks;
 
-    /* Small integers are preallocated in this array so that they
-       can be shared.
-       The integers that are preallocated are those in the range
-       -_PY_NSMALLNEGINTS (inclusive) to _PY_NSMALLPOSINTS (not inclusive).
-    */
-    PyLongObject small_ints[_PY_NSMALLNEGINTS + _PY_NSMALLPOSINTS];
     struct _Py_bytes_state bytes;
     struct _Py_unicode_state unicode;
     struct _Py_float_state float_state;
@@ -346,7 +321,6 @@ struct _is {
     struct _Py_tuple_state tuple;
     struct _Py_list_state list;
     struct _Py_dict_state dict_state;
-    struct _Py_frame_state frame;
     struct _Py_async_gen_state async_gen;
     struct _Py_context_state context;
     struct _Py_exc_state exc_state;

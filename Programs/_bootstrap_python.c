@@ -14,6 +14,16 @@
 #include "Python/frozen_modules/importlib._bootstrap_external.h"
 /* End includes */
 
+/* Empty initializer for deepfrozen modules */
+void _Py_Deepfreeze_Init(void)
+{
+}
+/* Empty finalizer for deepfrozen modules */
+void
+_Py_Deepfreeze_Fini(void)
+{
+}
+
 /* Note that a negative size indicates a package. */
 
 static const struct _frozen bootstrap_modules[] = {
@@ -103,3 +113,4 @@ error:
     }
     Py_ExitStatusException(status);
 }
+

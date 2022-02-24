@@ -553,16 +553,11 @@ PyCode_New(int argcount, int kwonlyargcount,
 PyCodeObject *
 PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno)
 {
-    PyObject *emptystring = NULL;
     PyObject *nulltuple = NULL;
     PyObject *filename_ob = NULL;
     PyObject *funcname_ob = NULL;
     PyCodeObject *result = NULL;
 
-    emptystring = PyBytes_FromString("");
-    if (emptystring == NULL) {
-        goto failed;
-    }
     nulltuple = PyTuple_New(0);
     if (nulltuple == NULL) {
         goto failed;
@@ -576,6 +571,7 @@ PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno)
         goto failed;
     }
 
+#define emptystring (PyObject *)&_Py_SINGLETON(bytes_empty)
     struct _PyCodeConstructor con = {
         .filename = filename_ob,
         .name = funcname_ob,
@@ -594,7 +590,6 @@ PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno)
     result = _PyCode_New(&con);
 
 failed:
-    Py_XDECREF(emptystring);
     Py_XDECREF(nulltuple);
     Py_XDECREF(funcname_ob);
     Py_XDECREF(filename_ob);
@@ -1020,7 +1015,7 @@ positionsiter_next(positionsiterator* pi)
 
 static PyTypeObject PositionsIterator = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-    "poisitions_iterator",              /* tp_name */
+    "positions_iterator",               /* tp_name */
     sizeof(positionsiterator),          /* tp_basicsize */
     0,                                  /* tp_itemsize */
     /* methods */
@@ -1542,6 +1537,16 @@ code_getfreevars(PyCodeObject *code, void *closure)
     return _PyCode_GetFreevars(code);
 }
 
+static PyObject *
+code_getquickened(PyCodeObject *code, void *closure)
+{
+    if (code->co_quickened == NULL) {
+        Py_RETURN_NONE;
+    }
+    return PyBytes_FromStringAndSize((char *)code->co_firstinstr,
+                                     PyBytes_Size(code->co_code));
+}
+
 static PyGetSetDef code_getsetlist[] = {
     {"co_lnotab",    (getter)code_getlnotab, NULL, NULL},
     // The following old names are kept for backward compatibility.
@@ -1549,6 +1554,7 @@ static PyGetSetDef code_getsetlist[] = {
     {"co_varnames",  (getter)code_getvarnames, NULL, NULL},
     {"co_cellvars",  (getter)code_getcellvars, NULL, NULL},
     {"co_freevars",  (getter)code_getfreevars, NULL, NULL},
+    {"_co_quickened",  (getter)code_getquickened, NULL, NULL},
     {0}
 };
 
@@ -1905,4 +1911,34 @@ _PyCode_ConstantKey(PyObject *op)
         Py_DECREF(obj_id);
     }
     return key;
+}
+
+void
+_PyStaticCode_Dealloc(PyCodeObject *co)
+{
+    if (co->co_quickened) {
+        PyMem_Free(co->co_quickened);
+        co->co_quickened = NULL;
+         _Py_QuickenedCount--;
+    }
+    co->co_warmup = QUICKENING_INITIAL_WARMUP_VALUE;
+    PyMem_Free(co->co_extra);
+    co->co_extra = NULL;
+    co->co_firstinstr = (_Py_CODEUNIT *)PyBytes_AS_STRING(co->co_code);
+    if (co->co_weakreflist != NULL) {
+        PyObject_ClearWeakRefs((PyObject *)co);
+        co->co_weakreflist = NULL;
+    }
+}
+
+void
+_PyStaticCode_InternStrings(PyCodeObject *co)
+{
+    int res = intern_strings(co->co_names);
+    assert(res == 0);
+    res = intern_string_constants(co->co_consts, NULL);
+    assert(res == 0);
+    res = intern_strings(co->co_localsplusnames);
+    assert(res == 0);
+    (void)res;
 }

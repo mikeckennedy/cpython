@@ -676,7 +676,7 @@ _PyCode_Addr2EndOffset(PyCodeObject* co, int addrq)
 }
 
 void
-PyLineTable_InitAddressRange(const char *linetable, Py_ssize_t length, int firstlineno, PyCodeAddressRange *range)
+_PyLineTable_InitAddressRange(const char *linetable, Py_ssize_t length, int firstlineno, PyCodeAddressRange *range)
 {
     range->opaque.lo_next = linetable;
     range->opaque.limit = range->opaque.lo_next + length;
@@ -691,7 +691,7 @@ _PyCode_InitAddressRange(PyCodeObject* co, PyCodeAddressRange *bounds)
 {
     const char *linetable = PyBytes_AS_STRING(co->co_linetable);
     Py_ssize_t length = PyBytes_GET_SIZE(co->co_linetable);
-    PyLineTable_InitAddressRange(linetable, length, co->co_firstlineno, bounds);
+    _PyLineTable_InitAddressRange(linetable, length, co->co_firstlineno, bounds);
     return bounds->ar_line;
 }
 
@@ -700,7 +700,7 @@ _PyCode_InitEndAddressRange(PyCodeObject* co, PyCodeAddressRange* bounds)
 {
     char* linetable = PyBytes_AS_STRING(co->co_endlinetable);
     Py_ssize_t length = PyBytes_GET_SIZE(co->co_endlinetable);
-    PyLineTable_InitAddressRange(linetable, length, co->co_firstlineno, bounds);
+    _PyLineTable_InitAddressRange(linetable, length, co->co_firstlineno, bounds);
     return bounds->ar_line;
 }
 
@@ -710,12 +710,12 @@ int
 _PyCode_CheckLineNumber(int lasti, PyCodeAddressRange *bounds)
 {
     while (bounds->ar_end <= lasti) {
-        if (!PyLineTable_NextAddressRange(bounds)) {
+        if (!_PyLineTable_NextAddressRange(bounds)) {
             return -1;
         }
     }
     while (bounds->ar_start > lasti) {
-        if (!PyLineTable_PreviousAddressRange(bounds)) {
+        if (!_PyLineTable_PreviousAddressRange(bounds)) {
             return -1;
         }
     }
@@ -765,7 +765,7 @@ at_end(PyCodeAddressRange *bounds) {
 }
 
 int
-PyLineTable_PreviousAddressRange(PyCodeAddressRange *range)
+_PyLineTable_PreviousAddressRange(PyCodeAddressRange *range)
 {
     if (range->ar_start <= 0) {
         return 0;
@@ -779,7 +779,7 @@ PyLineTable_PreviousAddressRange(PyCodeAddressRange *range)
 }
 
 int
-PyLineTable_NextAddressRange(PyCodeAddressRange *range)
+_PyLineTable_NextAddressRange(PyCodeAddressRange *range)
 {
     if (at_end(range)) {
         return 0;
@@ -847,7 +847,7 @@ decode_linetable(PyCodeObject *code)
         return NULL;
     }
     _PyCode_InitAddressRange(code, &bounds);
-    while (PyLineTable_NextAddressRange(&bounds)) {
+    while (_PyLineTable_NextAddressRange(&bounds)) {
         if (bounds.opaque.computed_line != line) {
             int bdelta = bounds.ar_start - code_offset;
             int ldelta = bounds.opaque.computed_line - line;
@@ -883,7 +883,7 @@ static PyObject *
 lineiter_next(lineiterator *li)
 {
     PyCodeAddressRange *bounds = &li->li_line;
-    if (!PyLineTable_NextAddressRange(bounds)) {
+    if (!_PyLineTable_NextAddressRange(bounds)) {
         return NULL;
     }
     PyObject *start = NULL;
@@ -1571,10 +1571,7 @@ code_sizeof(PyCodeObject *co, PyObject *Py_UNUSED(args))
     }
 
     if (co->co_quickened != NULL) {
-        Py_ssize_t count = co->co_quickened[0].entry.zero.cache_count;
-        count += (PyBytes_GET_SIZE(co->co_code)+sizeof(SpecializedCacheEntry)-1)/
-            sizeof(SpecializedCacheEntry);
-        res += count * sizeof(SpecializedCacheEntry);
+        res += PyBytes_GET_SIZE(co->co_code);
     }
 
     return PyLong_FromSsize_t(res);
@@ -1931,14 +1928,20 @@ _PyStaticCode_Dealloc(PyCodeObject *co)
     }
 }
 
-void
+int
 _PyStaticCode_InternStrings(PyCodeObject *co)
 {
     int res = intern_strings(co->co_names);
-    assert(res == 0);
+    if (res < 0) {
+        return -1;
+    }
     res = intern_string_constants(co->co_consts, NULL);
-    assert(res == 0);
+    if (res < 0) {
+        return -1;
+    }
     res = intern_strings(co->co_localsplusnames);
-    assert(res == 0);
-    (void)res;
+    if (res < 0) {
+        return -1;
+    }
+    return 0;
 }

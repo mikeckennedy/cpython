@@ -7,6 +7,7 @@ extern "C" {
 
 
 /* Instruction opcodes for compiled code */
+#define CACHE                             0
 #define POP_TOP                           1
 #define PUSH_NULL                         2
 #define NOP                               9
@@ -32,7 +33,6 @@ extern "C" {
 #define GET_YIELD_FROM_ITER              69
 #define PRINT_EXPR                       70
 #define LOAD_BUILD_CLASS                 71
-#define GET_AWAITABLE                    73
 #define LOAD_ASSERTION_ERROR             74
 #define RETURN_GENERATOR                 75
 #define LIST_TO_TUPLE                    82
@@ -85,6 +85,7 @@ extern "C" {
 #define POP_JUMP_IF_NOT_NONE            128
 #define POP_JUMP_IF_NONE                129
 #define RAISE_VARARGS                   130
+#define GET_AWAITABLE                   131
 #define MAKE_FUNCTION                   132
 #define BUILD_SLICE                     133
 #define JUMP_NO_INTERRUPT               134
@@ -160,13 +161,13 @@ extern "C" {
 #define PRECALL_NO_KW_LEN                66
 #define PRECALL_NO_KW_ISINSTANCE         67
 #define PRECALL_NO_KW_LIST_APPEND        72
-#define PRECALL_NO_KW_METHOD_DESCRIPTOR_O  76
-#define PRECALL_NO_KW_METHOD_DESCRIPTOR_NOARGS  77
-#define PRECALL_NO_KW_STR_1              78
-#define PRECALL_NO_KW_TUPLE_1            79
-#define PRECALL_NO_KW_TYPE_1             80
-#define PRECALL_NO_KW_METHOD_DESCRIPTOR_FAST  81
-#define PRECALL_BOUND_METHOD            131
+#define PRECALL_NO_KW_METHOD_DESCRIPTOR_O  73
+#define PRECALL_NO_KW_METHOD_DESCRIPTOR_NOARGS  76
+#define PRECALL_NO_KW_STR_1              77
+#define PRECALL_NO_KW_TUPLE_1            78
+#define PRECALL_NO_KW_TYPE_1             79
+#define PRECALL_NO_KW_METHOD_DESCRIPTOR_FAST  80
+#define PRECALL_BOUND_METHOD             81
 #define PRECALL_PYFUNC                  140
 #define RESUME_QUICK                    141
 #define STORE_ATTR_ADAPTIVE             143
@@ -182,10 +183,12 @@ extern "C" {
 #define LOAD_FAST__LOAD_CONST           170
 #define LOAD_CONST__LOAD_FAST           173
 #define STORE_FAST__STORE_FAST          174
-#define LOAD_FAST__LOAD_ATTR_INSTANCE_VALUE 175
 #define DO_TRACING                      255
-#ifdef NEED_OPCODE_JUMP_TABLES
-static uint32_t _PyOpcode_RelativeJump[8] = {
+
+extern const uint8_t _PyOpcode_InlineCacheEntries[256];
+
+#ifdef NEED_OPCODE_TABLES
+static const uint32_t _PyOpcode_RelativeJump[8] = {
     0U,
     0U,
     536870912U,
@@ -195,7 +198,7 @@ static uint32_t _PyOpcode_RelativeJump[8] = {
     0U,
     0U,
 };
-static uint32_t _PyOpcode_Jump[8] = {
+static const uint32_t _PyOpcode_Jump[8] = {
     0U,
     0U,
     536870912U,
@@ -204,6 +207,20 @@ static uint32_t _PyOpcode_Jump[8] = {
     0U,
     0U,
     0U,
+};
+
+const uint8_t _PyOpcode_InlineCacheEntries[256] = {
+    [BINARY_SUBSCR] = 4,
+    [STORE_SUBSCR] = 1,
+    [UNPACK_SEQUENCE] = 1,
+    [STORE_ATTR] = 4,
+    [LOAD_ATTR] = 4,
+    [COMPARE_OP] = 2,
+    [LOAD_GLOBAL] = 5,
+    [BINARY_OP] = 1,
+    [LOAD_METHOD] = 10,
+    [PRECALL] = 1,
+    [CALL] = 4,
 };
 #endif /* OPCODE_TABLES */
 

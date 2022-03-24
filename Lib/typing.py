@@ -118,6 +118,7 @@ __all__ = [
 
     # One-off things.
     'AnyStr',
+    'assert_type',
     'assert_never',
     'cast',
     'final',
@@ -185,10 +186,7 @@ def _type_check(arg, msg, is_argument=True, module=None, *, allow_special_forms=
         return arg
     if isinstance(arg, _SpecialForm) or arg in (Generic, Protocol):
         raise TypeError(f"Plain {arg} is not valid as type argument")
-    if isinstance(arg, (type, TypeVar, ForwardRef, types.UnionType, ParamSpec,
-                        ParamSpecArgs, ParamSpecKwargs, TypeVarTuple)):
-        return arg
-    if not callable(arg):
+    if type(arg) is tuple:
         raise TypeError(f"{msg} Got {arg!r:.100}.")
     return arg
 
@@ -941,13 +939,13 @@ class TypeVarTuple(_Final, _Immutable, _root=True):
     """
 
     def __init__(self, name):
-        self._name = name
+        self.__name__ = name
 
     def __iter__(self):
         yield Unpack[self]
 
     def __repr__(self):
-        return self._name
+        return self.__name__
 
     def __typing_subst__(self, arg):
         raise AssertionError
@@ -1222,7 +1220,6 @@ class _GenericAlias(_BaseGenericAlias, _root=True):
         if not isinstance(args, tuple):
             args = (args,)
         self.__args__ = tuple(... if a is _TypingEllipsis else
-                              () if a is _TypingEmpty else
                               a for a in args)
         self.__parameters__ = _collect_parameters(args)
         self._paramspec_tvars = _paramspec_tvars
@@ -1297,30 +1294,39 @@ class _GenericAlias(_BaseGenericAlias, _root=True):
         # anything more exotic than a plain `TypeVar`, we need to consider
         # edge cases.
 
-        if any(isinstance(p, TypeVarTuple) for p in self.__parameters__):
-            raise NotImplementedError(
-                "Type substitution for TypeVarTuples is not yet implemented"
-            )
+        params = self.__parameters__
         # In the example above, this would be {T3: str}
-        new_arg_by_param = dict(zip(self.__parameters__, args))
+        new_arg_by_param = {}
+        for i, param in enumerate(params):
+            if isinstance(param, TypeVarTuple):
+                j = len(args) - (len(params) - i - 1)
+                if j < i:
+                    raise TypeError(f"Too few arguments for {self}")
+                new_arg_by_param.update(zip(params[:i], args[:i]))
+                new_arg_by_param[param] = args[i: j]
+                new_arg_by_param.update(zip(params[i + 1:], args[j:]))
+                break
+        else:
+            new_arg_by_param.update(zip(params, args))
 
         new_args = []
         for old_arg in self.__args__:
 
-            if _is_unpacked_typevartuple(old_arg):
-                original_typevartuple = old_arg.__parameters__[0]
-                new_arg = new_arg_by_param[original_typevartuple]
+            substfunc = getattr(old_arg, '__typing_subst__', None)
+            if substfunc:
+                new_arg = substfunc(new_arg_by_param[old_arg])
             else:
-                substfunc = getattr(old_arg, '__typing_subst__', None)
-                if substfunc:
-                    new_arg = substfunc(new_arg_by_param[old_arg])
+                subparams = getattr(old_arg, '__parameters__', ())
+                if not subparams:
+                    new_arg = old_arg
                 else:
-                    subparams = getattr(old_arg, '__parameters__', ())
-                    if not subparams:
-                        new_arg = old_arg
-                    else:
-                        subargs = tuple(new_arg_by_param[x] for x in subparams)
-                        new_arg = old_arg[subargs]
+                    subargs = []
+                    for x in subparams:
+                        if isinstance(x, TypeVarTuple):
+                            subargs.extend(new_arg_by_param[x])
+                        else:
+                            subargs.append(new_arg_by_param[x])
+                    new_arg = old_arg[tuple(subargs)]
 
             if self.__origin__ == collections.abc.Callable and isinstance(new_arg, tuple):
                 # Consider the following `Callable`.
@@ -1496,8 +1502,6 @@ class _CallableType(_SpecialGenericAlias, _root=True):
 class _TupleType(_SpecialGenericAlias, _root=True):
     @_tp_cache
     def __getitem__(self, params):
-        if params == ():
-            return self.copy_with((_TypingEmpty,))
         if not isinstance(params, tuple):
             params = (params,)
         if len(params) >= 2 and params[-1] is ...:
@@ -1612,6 +1616,12 @@ class _UnpackGenericAlias(_GenericAlias, _root=True):
         # a single item.
         return '*' + repr(self.__args__[0])
 
+    def __getitem__(self, args):
+        if (len(self.__parameters__) == 1 and
+                isinstance(self.__parameters__[0], TypeVarTuple)):
+            return args
+        return super().__getitem__(args)
+
 
 class Generic:
     """Abstract base class for generic types.
@@ -1720,13 +1730,6 @@ class Generic:
                                     f" not listed in Generic[{s_args}]")
                 tvars = gvars
         cls.__parameters__ = tuple(tvars)
-
-
-class _TypingEmpty:
-    """Internal placeholder for () or []. Used by TupleMeta and CallableMeta
-    to allow empty list/tuple in specific places, without allowing them
-    to sneak in where prohibited.
-    """
 
 
 class _TypingEllipsis:
@@ -2077,6 +2080,22 @@ def cast(typ, val):
     signals that the return value has the designated type, but at
     runtime we intentionally don't check anything (we want this
     to be as fast as possible).
+    """
+    return val
+
+
+def assert_type(val, typ, /):
+    """Ask a static type checker to confirm that the value is of the given type.
+
+    When the type checker encounters a call to assert_type(), it
+    emits an error if the value is not of the specified type::
+
+        def greet(name: str) -> None:
+            assert_type(name, str)  # ok
+            assert_type(name, int)  # type checker error
+
+    At runtime this returns the first argument unchanged and otherwise
+    does nothing.
     """
     return val
 

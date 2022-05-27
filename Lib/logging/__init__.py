@@ -25,6 +25,7 @@ To use, simply 'import logging' and log away!
 
 import sys, os, time, io, re, traceback, warnings, weakref, collections.abc
 
+from types import GenericAlias
 from string import Template
 from string import Formatter as StrFormatter
 
@@ -63,19 +64,24 @@ _startTime = time.time()
 raiseExceptions = True
 
 #
-# If you don't want threading information in the log, set this to zero
+# If you don't want threading information in the log, set this to False
 #
 logThreads = True
 
 #
-# If you don't want multiprocessing information in the log, set this to zero
+# If you don't want multiprocessing information in the log, set this to False
 #
 logMultiprocessing = True
 
 #
-# If you don't want process information in the log, set this to zero
+# If you don't want process information in the log, set this to False
 #
 logProcesses = True
+
+#
+# If you don't want asyncio task information in the log, set this to False
+#
+logAsyncioTasks = True
 
 #---------------------------------------------------------------------------
 #   Level related stuff
@@ -360,6 +366,15 @@ class LogRecord(object):
         else:
             self.process = None
 
+        self.taskName = None
+        if logAsyncioTasks:
+            asyncio = sys.modules.get('asyncio')
+            if asyncio:
+                try:
+                    self.taskName = asyncio.current_task().get_name()
+                except Exception:
+                    pass
+
     def __repr__(self):
         return '<LogRecord: %s, %s, %s, %s, "%s">'%(self.name, self.levelno,
             self.pathname, self.lineno, self.msg)
@@ -565,6 +580,7 @@ class Formatter(object):
                         (typically at application startup time)
     %(thread)d          Thread ID (if available)
     %(threadName)s      Thread name (if available)
+    %(taskName)s        Task name (if available)
     %(process)d         Process ID (if available)
     %(message)s         The result of record.getMessage(), computed just as
                         the record is emitted
@@ -1144,6 +1160,8 @@ class StreamHandler(Handler):
         if name:
             name += ' '
         return '<%s %s(%s)>' % (self.__class__.__name__, name, level)
+
+    __class_getitem__ = classmethod(GenericAlias)
 
 
 class FileHandler(StreamHandler):
@@ -1774,8 +1792,6 @@ class Logger(Filterer):
         return '<%s %s (%s)>' % (self.__class__.__name__, self.name, level)
 
     def __reduce__(self):
-        # In general, only the root logger will not be accessible via its name.
-        # However, the root logger's class has its own __reduce__ method.
         if getLogger(self.name) is not self:
             import pickle
             raise pickle.PicklingError('logger cannot be pickled')
@@ -1938,6 +1954,8 @@ class LoggerAdapter(object):
         logger = self.logger
         level = getLevelName(logger.getEffectiveLevel())
         return '<%s %s (%s)>' % (self.__class__.__name__, logger.name, level)
+
+    __class_getitem__ = classmethod(GenericAlias)
 
 root = RootLogger(WARNING)
 Logger.root = root

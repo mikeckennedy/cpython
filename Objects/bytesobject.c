@@ -434,8 +434,10 @@ formatfloat(PyObject *v, int flags, int prec, int type,
     len = strlen(p);
     if (writer != NULL) {
         str = _PyBytesWriter_Prepare(writer, str, len);
-        if (str == NULL)
+        if (str == NULL) {
+            PyMem_Free(p);
             return NULL;
+        }
         memcpy(str, p, len);
         PyMem_Free(p);
         str += len;
@@ -2109,9 +2111,7 @@ bytes_translate_impl(PyBytesObject *self, PyObject *table,
                 changed = 1;
         }
         if (!changed && PyBytes_CheckExact(input_obj)) {
-            Py_INCREF(input_obj);
-            Py_DECREF(result);
-            result = input_obj;
+            Py_SETREF(result, Py_NewRef(input_obj));
         }
         PyBuffer_Release(&del_table_view);
         PyBuffer_Release(&table_view);
@@ -2316,7 +2316,7 @@ bytes_decode_impl(PyBytesObject *self, const char *encoding,
 /*[clinic input]
 bytes.splitlines
 
-    keepends: bool(accept={int}) = False
+    keepends: bool = False
 
 Return a list of the lines in the bytes, breaking at line boundaries.
 
@@ -2326,7 +2326,7 @@ true.
 
 static PyObject *
 bytes_splitlines_impl(PyBytesObject *self, int keepends)
-/*[clinic end generated code: output=3484149a5d880ffb input=a8b32eb01ff5a5ed]*/
+/*[clinic end generated code: output=3484149a5d880ffb input=5d7b898af2fe55c0]*/
 {
     return stringlib_splitlines(
         (PyObject*) self, PyBytes_AS_STRING(self),
@@ -3169,11 +3169,16 @@ PyDoc_STRVAR(length_hint_doc,
 static PyObject *
 striter_reduce(striterobject *it, PyObject *Py_UNUSED(ignored))
 {
+    PyObject *iter = _PyEval_GetBuiltin(&_Py_ID(iter));
+
+    /* _PyEval_GetBuiltin can invoke arbitrary code,
+     * call must be before access of iterator pointers.
+     * see issue #101765 */
+
     if (it->it_seq != NULL) {
-        return Py_BuildValue("N(O)n", _PyEval_GetBuiltin(&_Py_ID(iter)),
-                             it->it_seq, it->it_index);
+        return Py_BuildValue("N(O)n", iter, it->it_seq, it->it_index);
     } else {
-        return Py_BuildValue("N(())", _PyEval_GetBuiltin(&_Py_ID(iter)));
+        return Py_BuildValue("N(())", iter);
     }
 }
 

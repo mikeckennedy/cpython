@@ -1,6 +1,6 @@
 from pathlib import Path
-from test.support.import_helper import unload, CleanImport
-from test.support.warnings_helper import check_warnings, ignore_warnings
+from test.support.import_helper import unload
+from test.support.warnings_helper import check_warnings
 import unittest
 import sys
 import importlib
@@ -58,6 +58,25 @@ class PkgutilTests(unittest.TestCase):
         self.assertEqual(res1, RESOURCE_DATA)
         res2 = pkgutil.get_data(pkg, 'sub/res.txt')
         self.assertEqual(res2, RESOURCE_DATA)
+
+        del sys.modules[pkg]
+
+    def test_getdata_path_traversal(self):
+        pkg = 'test_getdata_traversal'
+
+        # Make a package with some resources
+        package_dir = os.path.join(self.dirname, pkg)
+        os.mkdir(package_dir)
+        # Empty init.py
+        f = open(os.path.join(package_dir, '__init__.py'), "wb")
+        f.close()
+
+        with self.assertRaises(ValueError):
+            pkgutil.get_data(pkg, '../../../etc/passwd')
+        with self.assertRaises(ValueError):
+            pkgutil.get_data(pkg, 'sub/../../../etc/passwd')
+        with self.assertRaises(ValueError):
+            pkgutil.get_data(pkg, os.path.abspath('/etc/passwd'))
 
         del sys.modules[pkg]
 
@@ -606,67 +625,6 @@ class ImportlibMigrationTests(unittest.TestCase):
     # With full PEP 302 support in the standard import machinery, the
     # PEP 302 emulation in this module is in the process of being
     # deprecated in favour of importlib proper
-
-    @unittest.skipIf(__name__ == '__main__', 'not compatible with __main__')
-    @ignore_warnings(category=DeprecationWarning)
-    def test_get_loader_handles_missing_loader_attribute(self):
-        global __loader__
-        this_loader = __loader__
-        del __loader__
-        try:
-            self.assertIsNotNone(pkgutil.get_loader(__name__))
-        finally:
-            __loader__ = this_loader
-
-    @ignore_warnings(category=DeprecationWarning)
-    def test_get_loader_handles_missing_spec_attribute(self):
-        name = 'spam'
-        mod = type(sys)(name)
-        del mod.__spec__
-        with CleanImport(name):
-            sys.modules[name] = mod
-            loader = pkgutil.get_loader(name)
-        self.assertIsNone(loader)
-
-    @ignore_warnings(category=DeprecationWarning)
-    def test_get_loader_handles_spec_attribute_none(self):
-        name = 'spam'
-        mod = type(sys)(name)
-        mod.__spec__ = None
-        with CleanImport(name):
-            sys.modules[name] = mod
-            loader = pkgutil.get_loader(name)
-        self.assertIsNone(loader)
-
-    @ignore_warnings(category=DeprecationWarning)
-    def test_get_loader_None_in_sys_modules(self):
-        name = 'totally bogus'
-        sys.modules[name] = None
-        try:
-            loader = pkgutil.get_loader(name)
-        finally:
-            del sys.modules[name]
-        self.assertIsNone(loader)
-
-    def test_get_loader_is_deprecated(self):
-        with check_warnings(
-            (r".*\bpkgutil.get_loader\b.*", DeprecationWarning),
-        ):
-            res = pkgutil.get_loader("sys")
-        self.assertIsNotNone(res)
-
-    def test_find_loader_is_deprecated(self):
-        with check_warnings(
-            (r".*\bpkgutil.find_loader\b.*", DeprecationWarning),
-        ):
-            res = pkgutil.find_loader("sys")
-        self.assertIsNotNone(res)
-
-    @ignore_warnings(category=DeprecationWarning)
-    def test_find_loader_missing_module(self):
-        name = 'totally bogus'
-        loader = pkgutil.find_loader(name)
-        self.assertIsNone(loader)
 
     def test_get_importer_avoids_emulation(self):
         # We use an illegal path so *none* of the path hooks should fire

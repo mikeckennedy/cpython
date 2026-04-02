@@ -8,11 +8,9 @@ import importlib.machinery
 import os
 import os.path
 import sys
-from types import ModuleType
-import warnings
 
 __all__ = [
-    'get_importer', 'iter_importers', 'get_loader', 'find_loader',
+    'get_importer', 'iter_importers',
     'walk_packages', 'iter_modules', 'get_data',
     'read_code', 'extend_path',
     'ModuleInfo',
@@ -263,59 +261,6 @@ def iter_importers(fullname=""):
         yield get_importer(item)
 
 
-def get_loader(module_or_name):
-    """Get a "loader" object for module_or_name
-
-    Returns None if the module cannot be found or imported.
-    If the named module is not already imported, its containing package
-    (if any) is imported, in order to establish the package __path__.
-    """
-    warnings._deprecated("pkgutil.get_loader",
-                         f"{warnings._DEPRECATED_MSG}; "
-                         "use importlib.util.find_spec() instead",
-                         remove=(3, 14))
-    if module_or_name in sys.modules:
-        module_or_name = sys.modules[module_or_name]
-        if module_or_name is None:
-            return None
-    if isinstance(module_or_name, ModuleType):
-        module = module_or_name
-        loader = getattr(module, '__loader__', None)
-        if loader is not None:
-            return loader
-        if getattr(module, '__spec__', None) is None:
-            return None
-        fullname = module.__name__
-    else:
-        fullname = module_or_name
-    return find_loader(fullname)
-
-
-def find_loader(fullname):
-    """Find a "loader" object for fullname
-
-    This is a backwards compatibility wrapper around
-    importlib.util.find_spec that converts most failures to ImportError
-    and only returns the loader rather than the full spec
-    """
-    warnings._deprecated("pkgutil.find_loader",
-                         f"{warnings._DEPRECATED_MSG}; "
-                         "use importlib.util.find_spec() instead",
-                         remove=(3, 14))
-    if fullname.startswith('.'):
-        msg = "Relative module name {!r} not supported".format(fullname)
-        raise ImportError(msg)
-    try:
-        spec = importlib.util.find_spec(fullname)
-    except (ImportError, AttributeError, TypeError, ValueError) as ex:
-        # This hack fixes an impedance mismatch between pkgutil and
-        # importlib, where the latter raises other errors for cases where
-        # pkgutil previously raised ImportError
-        msg = "Error while finding loader for {!r} ({}: {})"
-        raise ImportError(msg.format(fullname, type(ex), ex)) from ex
-    return spec.loader if spec is not None else None
-
-
 def extend_path(path, name):
     """Extend a package's path.
 
@@ -448,6 +393,9 @@ def get_data(package, resource):
     # signature - an os.path format "filename" starting with the dirname of
     # the package's __file__
     parts = resource.split('/')
+    if os.path.isabs(resource) or '..' in parts:
+        raise ValueError("resource must be a relative path with no "
+                         "parent directory components")
     parts.insert(0, os.path.dirname(mod.__file__))
     resource_name = os.path.join(*parts)
     return loader.get_data(resource_name)
